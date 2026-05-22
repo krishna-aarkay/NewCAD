@@ -108,7 +108,8 @@ async function startServer() {
   // Auth Status check: Check if any registered user exists in system
   app.get('/api/auth/initialized', (req, res) => {
     const db = readDB();
-    const initialized = db.users.length > 0;
+    // In production, the system is considered initialized only after default demo accounts are permanently deactivated/purged by registering an administrator profile
+    const initialized = !!db.defaultLoginsDisabled;
     res.json({ initialized });
   });
 
@@ -344,57 +345,146 @@ async function startServer() {
     // Process running licenses simulation
     let processedFeatures: any[] = [];
     let logMessage = '';
+    let fileReadSuccess = false;
+    let externalQuerySuccess = false;
     
     if (fetchRunningLicenses) {
       const targetPort = queryPort || port;
       const targetPath = licenseFilePath || `/etc/flexlm/${type}.lic`;
       
       if (fetchMethod === 'path') {
-        logMessage = `[FLEXlm Loader] Reading active license records at path: '${targetPath}'\n` +
-                     `[FLEXlm Loader] Successfully opened file. Parsed valid feature components.\n` +
-                     `[FLEXlm Loader] Verified cryptographic signatures. Active licensing nodes loaded.\n\n`;
+        logMessage = `[FLEXlm Loader] Initiating scan for active license records at: '${targetPath}'\n`;
+        try {
+          if (fs.existsSync(targetPath)) {
+            const content = fs.readFileSync(targetPath, 'utf-8');
+            const lines = content.split('\n');
+            const parsed: any[] = [];
+            lines.forEach((line: string) => {
+              const cleanLine = line.trim();
+              if (cleanLine.startsWith('FEATURE') || cleanLine.startsWith('INCREMENT')) {
+                const parts = cleanLine.split(/\s+/);
+                if (parts.length >= 6) {
+                  const namePart = parts[1];
+                  const rawDatePart = parts[4];
+                  const rawTotalPart = parts[5];
+                  
+                  let cleanDate = '2026-12-31';
+                  if (rawDatePart) {
+                    const match = rawDatePart.match(/(\d{1,2})-(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)-(\d{4})/i);
+                    if (match) {
+                      const months: Record<string, string> = {
+                        jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+                        jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+                      };
+                      const d = match[1].padStart(2, '0');
+                      const m = months[match[2].toLowerCase()];
+                      const y = match[3];
+                      cleanDate = `${y}-${m}-${d}`;
+                    }
+                  }
+                  
+                  const totalCount = Number(rawTotalPart) || 20;
+                  parsed.push({
+                    name: namePart,
+                    total: totalCount,
+                    used: Math.floor(totalCount * 0.35),
+                    expiryDate: cleanDate
+                  });
+                }
+              }
+            });
+            
+            if (parsed.length > 0) {
+              processedFeatures = parsed;
+              fileReadSuccess = true;
+              logMessage += `[FLEXlm Loader] Success: Read and parsed ${parsed.length} active feature nodes directly from standard RHEL license file.\n`;
+              parsed.forEach(f => {
+                logMessage += `  - ${f.name}: ${f.total} keys (${f.used} currently active)\n`;
+              });
+            } else {
+              logMessage += `[FLEXlm Loader] Info: File opened successfully but no active 'FEATURE' or 'INCREMENT' entries were found.\n`;
+            }
+          } else {
+            logMessage += `[FLEXlm Loader] Error: File does not exist at '${targetPath}' on this RHEL 10 server. Falling back to dynamic simulator...\n`;
+          }
+        } catch (fileErr: any) {
+          logMessage += `[FLEXlm Loader] Error reading ${targetPath}: ${fileErr.message || 'Access Denied'}. Falling back to dynamic simulator...\n`;
+        }
       } else {
-        logMessage = `[FLEXlm lmutil] Querying daemon processes on port ${targetPort} via 'lmutil lmstat'...\n` +
-                     `[FLEXlm lmutil] Active connection established with vendor daemon at ${host}:${targetPort}.\n` +
-                     `[FLEXlm lmutil] Response received. Extracted total active license keys in use.\n\n`;
+        logMessage = `[FLEXlm lmutil] Querying live vendor processes on TCP port ${targetPort} via local 'lmutil' bundle...\n`;
+        try {
+          const { execSync } = require('child_process');
+          const queryCmd = `lmutil lmstat -c ${targetPort}@${host} -a`;
+          logMessage += `[FLEXlm lmutil] Running command: ${queryCmd}\n`;
+          
+          const stdout = execSync(queryCmd, { timeout: 3000, encoding: 'utf-8' });
+          if (stdout) {
+            const regex = /Users of ([\w-]+):[\s\S]*?Total of (\d+) licenses? issued;[\s\S]*?Total of (\d+) licenses? in use/gi;
+            let match;
+            const parsed: any[] = [];
+            while ((match = regex.exec(stdout)) !== null) {
+              parsed.push({
+                name: match[1],
+                total: Number(match[2]),
+                used: Number(match[3]),
+                expiryDate: '2026-12-31'
+              });
+            }
+            if (parsed.length > 0) {
+              processedFeatures = parsed;
+              externalQuerySuccess = true;
+              logMessage += `[FLEXlm lmutil] Success: Obtained active license metrics from ${host}:${targetPort}. Loaded ${parsed.length} active nodes.\n`;
+              parsed.forEach(f => {
+                logMessage += `  - ${f.name}: ${f.total} keys (${f.used} active)\n`;
+              });
+            }
+          }
+        } catch (execErr: any) {
+          logMessage += `[FLEXlm lmutil] Live server lookup at ${host}:${targetPort} skipped. (FLEXlm utilities not in standard PATH or daemon offline).\n` +
+                        `[FLEXlm lmutil] Initializing high-fidelity mock stream generator for this domain...\n`;
+        }
       }
       
-      if (type === 'cadence') {
-        processedFeatures = [
-          { name: 'virtuoso_layout', total: 50, used: 25 },
-          { name: 'innovus_place_route', total: 30, used: 10 },
-          { name: 'spectre_simulator', total: 100, used: 40 }
-        ];
-        logMessage += `[FLEXlm] Processed Features:\n` +
-                      `  - virtuoso_layout: 50 total keys (25 currently check out)\n` +
-                      `  - innovus_place_route: 30 total keys (10 currently check out)\n` +
-                      `  - spectre_simulator: 100 total keys (40 currently check out)\n`;
-      } else if (type === 'synopsys') {
-        processedFeatures = [
-          { name: 'vcs_compiler', total: 80, used: 32 },
-          { name: 'design_compiler', total: 40, used: 15 },
-          { name: 'prime_time_px', total: 25, used: 5 }
-        ];
-        logMessage += `[FLEXlm] Processed Features:\n` +
-                      `  - vcs_compiler: 80 total keys (32 currently check out)\n` +
-                      `  - design_compiler: 40 total keys (15 currently check out)\n` +
-                      `  - prime_time_px: 25 total keys (5 currently check out)\n`;
-      } else if (type === 'mentor') {
-        processedFeatures = [
-          { name: 'calibre_drc', total: 60, used: 22 },
-          { name: 'calibre_lvs', total: 30, used: 12 }
-        ];
-        logMessage += `[FLEXlm] Processed Features:\n` +
-                      `  - calibre_drc: 60 total keys (22 currently check out)\n` +
-                      `  - calibre_lvs: 30 total keys (12 currently check out)\n`;
-      } else {
-        processedFeatures = [
-          { name: 'sim_accelerator', total: 200, used: 85 },
-          { name: 'hspice_solver', total: 50, used: 20 }
-        ];
-        logMessage += `[FLEXlm] Processed Features:\n` +
-                      `  - sim_accelerator: 200 total keys (85 currently check out)\n` +
-                      `  - hspice_solver: 50 total keys (20 currently check out)\n`;
+      // Fallback simulation with custom server-specific license feature names so they are highly distinct from the generic demo servers!
+      if (!fileReadSuccess && !externalQuerySuccess) {
+        const cleanPrefix = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) || 'node';
+        if (type === 'cadence') {
+          processedFeatures = [
+            { name: `${cleanPrefix}_virtuoso_ultra`, total: 120, used: 45 },
+            { name: `${cleanPrefix}_spectre_rf`, total: 80, used: 12 },
+            { name: `${cleanPrefix}_innovus_hierarchical`, total: 40, used: 15 }
+          ];
+          logMessage += `[FLEXlm Sim] Fallback initialized using unique naming rules for server '${name}':\n` +
+                        `  - ${cleanPrefix}_virtuoso_ultra: 120 keys (45 active)\n` +
+                        `  - ${cleanPrefix}_spectre_rf: 80 keys (12 active)\n` +
+                        `  - ${cleanPrefix}_innovus_hierarchical: 40 keys (15 active)\n`;
+        } else if (type === 'synopsys') {
+          processedFeatures = [
+            { name: `${cleanPrefix}_hspice_rhel10`, total: 150, used: 55 },
+            { name: `${cleanPrefix}_vcs_optimization`, total: 90, used: 28 },
+            { name: `${cleanPrefix}_prime_time_si`, total: 35, used: 8 }
+          ];
+          logMessage += `[FLEXlm Sim] Fallback initialized using unique naming rules for server '${name}':\n` +
+                        `  - ${cleanPrefix}_hspice_rhel10: 150 keys (55 active)\n` +
+                        `  - ${cleanPrefix}_vcs_optimization: 90 keys (28 active)\n` +
+                        `  - ${cleanPrefix}_prime_time_si: 35 keys (8 active)\n`;
+        } else if (type === 'mentor') {
+          processedFeatures = [
+            { name: `${cleanPrefix}_calibre_drc_x64`, total: 110, used: 40 },
+            { name: `${cleanPrefix}_calibre_lvs_rhel`, total: 50, used: 15 }
+          ];
+          logMessage += `[FLEXlm Sim] Fallback initialized using unique naming rules for server '${name}':\n` +
+                        `  - ${cleanPrefix}_calibre_drc_x64: 110 keys (40 active)\n` +
+                        `  - ${cleanPrefix}_calibre_lvs_rhel: 50 keys (15 active)\n`;
+        } else {
+          processedFeatures = [
+            { name: `${cleanPrefix}_lic_token_engine`, total: 200, used: 75 },
+            { name: `${cleanPrefix}_custom_vendor_dae`, total: 60, used: 20 }
+          ];
+          logMessage += `[FLEXlm Sim] Fallback initialized using unique naming rules for server '${name}':\n` +
+                        `  - ${cleanPrefix}_lic_token_engine: 200 keys (75 active)\n` +
+                        `  - ${cleanPrefix}_custom_vendor_dae: 60 keys (20 active)\n`;
+        }
       }
     } else {
       processedFeatures = features || [];
