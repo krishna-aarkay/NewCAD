@@ -33,7 +33,8 @@ export function generateInitialData(): DatabaseSchema {
       },
       group: 'IC_DESIGN_LEAD',
       host: 'headnode-01',
-      project: 'Project_Apollo'
+      project: 'Project_Apollo',
+      password: 'admin'
     },
     {
       id: 'usr-2',
@@ -48,7 +49,8 @@ export function generateInitialData(): DatabaseSchema {
       },
       group: 'PHYSICAL_DV',
       host: 'node-405',
-      project: 'Project_Apollo'
+      project: 'Project_Apollo',
+      password: 'alex'
     },
     {
       id: 'usr-3',
@@ -63,7 +65,8 @@ export function generateInitialData(): DatabaseSchema {
       },
       group: 'DFT_TEAM',
       host: 'workstation-12',
-      project: 'Project_Zephyr'
+      project: 'Project_Zephyr',
+      password: 'meera'
     },
     {
       id: 'usr-4',
@@ -78,7 +81,8 @@ export function generateInitialData(): DatabaseSchema {
       },
       group: 'IC_DESIGN_LEAD',
       host: 'node-110',
-      project: 'Project_Apollo'
+      project: 'Project_Apollo',
+      password: 'chen'
     }
   ];
 

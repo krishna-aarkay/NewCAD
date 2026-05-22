@@ -56,6 +56,7 @@ export interface UserProfile {
   group?: string;
   host?: string;
   project?: string;
+  password?: string;
 }
 
 export interface UsageRecord {

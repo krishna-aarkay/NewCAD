@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { Shield, Mail, User, Info, Building2, Cpu } from 'lucide-react';
+import { Shield, Mail, User, Info, Building2, Cpu, Key } from 'lucide-react';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -10,6 +10,7 @@ interface LoginScreenProps {
 export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProps) {
   const [isInitialized, setIsInitialized] = useState<boolean | null>(null);
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'Admin' | 'Manager' | 'Engineer'>('Engineer');
   const [group, setGroup] = useState('IC_DESIGN_LEAD');
@@ -37,8 +38,8 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-      setError('Please provide your username');
+    if (!username.trim() || !password.trim()) {
+      setError('Please provide both username and password.');
       return;
     }
 
@@ -49,7 +50,10 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
       const res = await fetch(`${apiHost}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim() }),
+        body: JSON.stringify({ 
+          username: username.trim(),
+          password: password.trim()
+        }),
       });
 
       const data = await res.json();
@@ -67,8 +71,8 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !email.trim()) {
-      setError('Username and Email are required.');
+    if (!username.trim() || !email.trim() || !password.trim()) {
+      setError('Username, Email, and Password are all required.');
       return;
     }
 
@@ -85,7 +89,8 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
           role,
           group,
           project,
-          host
+          host,
+          password: password.trim()
         }),
       });
 
@@ -161,6 +166,27 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
                   />
                 </div>
               </div>
+
+              <div>
+                <label htmlFor="password" className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Key className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -173,8 +199,10 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
               </button>
               
               <div className="text-center">
-                <span className="text-xs text-slate-400">
-                  Demo profiles hint: Use <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">admin</code> or <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">alex_k</code>
+                <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100 block mb-3 text-left leading-relaxed">
+                  <strong>🔑 Default Profiles Reference:</strong><br />
+                  &bull; <strong>admin</strong> (password: <code className="bg-slate-200 px-1 py-0.2 rounded text-slate-700 font-mono">admin</code>)<br />
+                  &bull; <strong>alex_k</strong> (password: <code className="bg-slate-200 px-1 py-0.2 rounded text-slate-700 font-mono">alex</code>)
                 </span>
                 <button
                   type="button"
@@ -223,6 +251,25 @@ export default function LoginScreen({ onLoginSuccess, apiHost }: LoginScreenProp
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="e.g. sowjanyanarava541@gmail.com"
+                    className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Secure Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                    <Key className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Define secure password"
                     className="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition"
                   />
                 </div>

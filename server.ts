@@ -115,9 +115,12 @@ async function startServer() {
 
   // Login
   app.post('/api/auth/login', (req, res) => {
-    const { username } = req.body;
+    const { username, password } = req.body;
     if (!username) {
       return res.status(400).json({ error: 'Username is required' });
+    }
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
     }
     const db = readDB();
     const cleanUsername = username.trim().toLowerCase();
@@ -132,14 +135,23 @@ async function startServer() {
     if (!user) {
       return res.status(404).json({ error: 'User not found. Please register.' });
     }
+
+    // Passwords check
+    if (user.password && user.password !== password) {
+      return res.status(401).json({ error: 'Invalid password credentials. Please try again.' });
+    }
+
     res.json({ user });
   });
 
   // Register First User / Create Login
   app.post('/api/auth/register', (req, res) => {
-    const { username, email, role, group, project, host } = req.body;
+    const { username, email, role, group, project, host, password } = req.body;
     if (!username || !email) {
       return res.status(400).json({ error: 'Username and email are required' });
+    }
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required for profile activation' });
     }
 
     const db = readDB();
@@ -163,7 +175,8 @@ async function startServer() {
       },
       group: group || 'IC_DESIGN_LEAD',
       project: project || 'Project_Apollo',
-      host: host || 'workstation-local'
+      host: host || 'workstation-local',
+      password: password.trim()
     };
 
     db.users.push(newUser);
@@ -243,7 +256,7 @@ async function startServer() {
     if (caller.role !== 'Admin') {
       return res.status(403).json({ error: 'Unauthorized. Admins only.' });
     }
-    const { username, email, role, group, project, host } = req.body;
+    const { username, email, role, group, project, host, password } = req.body;
     if (!username || !email) {
       return res.status(400).json({ error: 'Username and email are required' });
     }
@@ -267,7 +280,8 @@ async function startServer() {
       },
       group: group || 'IC_DESIGN_LEAD',
       project: project || 'Project_Apollo',
-      host: host || 'workstation-local'
+      host: host || 'workstation-local',
+      password: password ? password.trim() : 'password'
     };
 
     db.users.push(newUser);
