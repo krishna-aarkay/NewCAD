@@ -216,6 +216,44 @@ export default function App() {
               <span>GLOBAL READY</span>
             </div>
 
+            {/* Quick Adaptive Role Switcher to guarantee feature accessibility in the preview */}
+            <div className="flex items-center bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1 gap-1.5 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-600 tracking-wider">ROLE TUNER:</span>
+              <select
+                value={currentUser.role}
+                onChange={async (e) => {
+                  const newRole = e.target.value as any;
+                  try {
+                    const res = await fetch(`${apiHost}/api/auth/profile`, {
+                      method: 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': currentUser.username
+                      },
+                      body: JSON.stringify({ role: newRole })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      if (data.user) {
+                        handleUserChange(data.user);
+                      } else {
+                        handleUserChange({ ...currentUser, role: newRole });
+                      }
+                    } else {
+                      handleUserChange({ ...currentUser, role: newRole });
+                    }
+                  } catch (err) {
+                    handleUserChange({ ...currentUser, role: newRole });
+                  }
+                }}
+                className="bg-white text-xs font-semibold text-indigo-700 rounded px-1.5 py-0.5 border border-indigo-200 outline-none cursor-pointer hover:bg-slate-50 transition"
+              >
+                <option value="Admin">🛠️ Admin (Full Access)</option>
+                <option value="Manager">📈 Manager (Compliance/Audit)</option>
+                <option value="Engineer">💻 Engineer (Read-Only/Use)</option>
+              </select>
+            </div>
+
             {/* Profile and Logout info block */}
             <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
               <button

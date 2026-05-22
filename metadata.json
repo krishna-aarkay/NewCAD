@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "EDA License Manager",
+  "description": "A comprehensive dashboard for EDA tool license monitoring, SSH controls, active checkouts tracking, email alerts, usage reports, and custom FlexLM options configurations.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

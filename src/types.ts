@@ -73,7 +73,7 @@ export interface OptionsRule {
   type: 'RESERVE' | 'EXCLUDE' | 'INCLUDE' | 'PREEMPT' | 'PRIORITY';
   count?: number; // count for RESERVE or level for PRIORITY
   feature: string;
-  groupType: 'USER' | 'HOST' | 'INTERNET' | 'PROJECT';
+  groupType: 'USER' | 'HOST' | 'INTERNET' | 'PROJECT' | 'GROUP' | 'HOST_GROUP';
   groupName: string;
 }
 
@@ -109,4 +109,17 @@ export interface LicenseComplianceIssue {
   message: string;
   details: string;
   timestamp: string;
+}
+
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  username: string;
+  senderName: string;
+  senderEmail: string;
+  recipients: string;
+  tlsEnabled: boolean;
+  alertsEnabled: boolean;
+  testStatus?: 'idle' | 'success' | 'failure' | 'sending';
+  testLog?: string;
 }

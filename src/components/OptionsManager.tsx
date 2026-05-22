@@ -29,7 +29,7 @@ export default function OptionsManager({ apiHost, currentUser, servers, onRefres
   const [newCount, setNewCount] = useState<number>(5);
   const [newPriority, setNewPriority] = useState<'HIGH' | 'MEDIUM' | 'LOW'>('HIGH');
   const [newFeature, setNewFeature] = useState<string>('');
-  const [newGroupType, setNewGroupType] = useState<'USER' | 'HOST' | 'INTERNET' | 'PROJECT'>('USER');
+  const [newGroupType, setNewGroupType] = useState<'USER' | 'GROUP' | 'HOST' | 'HOST_GROUP' | 'INTERNET' | 'PROJECT'>('USER');
   const [newGroupName, setNewGroupName] = useState<string>('');
 
   // Group creator state
@@ -314,10 +314,12 @@ export default function OptionsManager({ apiHost, currentUser, servers, onRefres
                   onChange={(e) => setNewGroupType(e.target.value as any)}
                   className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded text-xs"
                 >
-                  <option value="USER">USER (individual Name)</option>
-                  <option value="HOST">HOST (Discrete node)</option>
-                  <option value="INTERNET">INTERNET (IP / Network Subnet)</option>
-                  <option value="PROJECT">PROJECT</option>
+                  <option value="USER">USER (Individual Name)</option>
+                  <option value="GROUP">GROUP (Declared User List)</option>
+                  <option value="HOST">HOST (Discrete Workstation)</option>
+                  <option value="HOST_GROUP">HOST_GROUP (Discrete Workstation List)</option>
+                  <option value="INTERNET">INTERNET (IP / Network Subnet / CIDR)</option>
+                  <option value="PROJECT">PROJECT (Associated Billing Code)</option>
                 </select>
               </div>
             </div>

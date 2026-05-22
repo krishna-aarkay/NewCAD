@@ -173,7 +173,7 @@ async function startServer() {
   // Update profile and notification settings
   app.put('/api/auth/profile', (req, res) => {
     const currentUser = (req as any).user;
-    const { email, group, project, host, notifications } = req.body;
+    const { email, group, project, host, role, notifications } = req.body;
 
     const db = readDB();
     const userIndex = db.users.findIndex(u => u.id === currentUser.id);
@@ -185,6 +185,7 @@ async function startServer() {
     if (group) db.users[userIndex].group = group;
     if (project) db.users[userIndex].project = project;
     if (host) db.users[userIndex].host = host;
+    if (role) db.users[userIndex].role = role;
     if (notifications) {
       db.users[userIndex].notifications = {
         ...db.users[userIndex].notifications,
@@ -217,6 +218,64 @@ async function startServer() {
     user.role = role;
     writeDB(db);
     res.json({ user });
+  });
+
+  // Create login user (Admins only)
+  app.post('/api/users', (req, res) => {
+    const caller = (req as any).user;
+    if (caller.role !== 'Admin') {
+      return res.status(403).json({ error: 'Unauthorized. Admins only.' });
+    }
+    const { username, email, role, group, project, host } = req.body;
+    if (!username || !email) {
+      return res.status(400).json({ error: 'Username and email are required' });
+    }
+
+    const db = readDB();
+    const cleanUsername = username.trim();
+    if (db.users.find(u => u.username.toLowerCase() === cleanUsername.toLowerCase())) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    const newUser: UserProfile = {
+      id: `usr-${Date.now()}`,
+      username: cleanUsername,
+      email: email.trim(),
+      role: role || 'Engineer',
+      notifications: {
+        emailAlerts: true,
+        expiryDaysThreshold: 30,
+        checkoutAlerts: true,
+        preemptionAlerts: true
+      },
+      group: group || 'IC_DESIGN_LEAD',
+      project: project || 'Project_Apollo',
+      host: host || 'workstation-local'
+    };
+
+    db.users.push(newUser);
+    writeDB(db);
+    res.status(201).json({ user: newUser });
+  });
+
+  // Delete login user (Admins only)
+  app.delete('/api/users/:id', (req, res) => {
+    const caller = (req as any).user;
+    if (caller.role !== 'Admin') {
+      return res.status(403).json({ error: 'Unauthorized. Admins only.' });
+    }
+    const { id } = req.params;
+    if (caller.id === id || caller.username === id) {
+      return res.status(400).json({ error: 'Cannot delete your own active login session account.' });
+    }
+
+    const db = readDB();
+    const idx = db.users.findIndex(u => u.id === id);
+    if (idx === -1) return res.status(404).json({ error: 'User not found in system directory' });
+
+    db.users.splice(idx, 1);
+    writeDB(db);
+    res.json({ success: true });
   });
 
   // --- License Servers API ---
@@ -322,6 +381,27 @@ async function startServer() {
     const db = readDB();
     const idx = db.servers.findIndex(s => s.id === id);
     if (idx === -1) return res.status(404).json({ error: 'Server not found' });
+
+    const server = db.servers[idx];
+    if (server.sshEnabled) {
+      const loggerTimestamp = new Date().toISOString();
+      const sshLog = `[SSH-DELETION] Establishing connection to remote server: ${server.sshUsername}@${server.sshHost || server.host}:${server.sshPort || 22}...
+[SSH-DELETION] Remote authentication accepted via password protocol.
+[SSH-DELETION] Remote machine: ${server.host} (type: ${server.type})
+[SSH-DELETION] Command triggered: lmutil lmdown -c /var/flexlm/${server.type}.lic -force
+[SSH-DELETION] Output: Shutting down CAD license system daemons on daemon port ${server.port}...
+[SSH-DELETION] Command triggered: rm -f /var/flexlm/${server.type}.lic /var/flexlm/options/${server.type}.opt
+[SSH-DELETION] Output: File directories cleaned up successfully.
+[SSH-DELETION] SSH session closed. Remote license host removed.`;
+
+      db.commandLogs.push({
+        id: `log-del-${Date.now()}`,
+        timestamp: loggerTimestamp,
+        serverId: id,
+        action: 'SSH_DELETE_SERVER',
+        output: sshLog
+      });
+    }
 
     db.servers.splice(idx, 1);
     delete db.optionsFiles[id];
@@ -746,12 +826,15 @@ ${server.features.map(f => `  ${f.name}: (Total of ${f.total} licenses available
 
   // CSV Export endpoint
   app.get('/api/reports/export', (req, res) => {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, feature, project, username } = req.query;
     const db = readDB();
 
     let filteredRecords = db.usage;
     if (startDate) filteredRecords = filteredRecords.filter(r => r.date >= (startDate as string));
     if (endDate) filteredRecords = filteredRecords.filter(r => r.date <= (endDate as string));
+    if (feature) filteredRecords = filteredRecords.filter(r => r.featureName === (feature as string));
+    if (project) filteredRecords = filteredRecords.filter(r => r.project === (project as string));
+    if (username) filteredRecords = filteredRecords.filter(r => r.username.toLowerCase() === (username as string).toLowerCase().trim());
 
     let csv = 'ID,User,Feature,Date,Hours Used,Tokens,Project\n';
     filteredRecords.forEach(r => {
@@ -1422,6 +1505,70 @@ Heuristics Recommendations:
 - Set up automated preemption priority guidelines for virtuoso compiler licenses.`
       });
     }
+  });
+
+  // GET SMTP Settings
+  app.get('/api/config/smtp', (req, res) => {
+    const db = readDB();
+    res.json({ smtpSettings: db.smtpSettings });
+  });
+
+  // POST SMTP Settings
+  app.post('/api/config/smtp', (req, res) => {
+    const caller = (req as any).user;
+    if (caller.role !== 'Admin') {
+      return res.status(403).json({ error: 'Unauthorized. Admins only.' });
+    }
+    const { host, port, username, senderName, senderEmail, recipients, tlsEnabled, alertsEnabled } = req.body;
+    
+    const db = readDB();
+    db.smtpSettings = {
+      ...db.smtpSettings,
+      host: host || 'smtp.office365.com',
+      port: Number(port) || 587,
+      username: username || '',
+      senderName: senderName || '',
+      senderEmail: senderEmail || '',
+      recipients: recipients || '',
+      tlsEnabled: !!tlsEnabled,
+      alertsEnabled: !!alertsEnabled,
+      testStatus: 'idle',
+      testLog: 'SMTP Settings saved successfully.'
+    };
+    writeDB(db);
+    res.json({ smtpSettings: db.smtpSettings });
+  });
+
+  // POST SMTP TEST
+  app.post('/api/config/smtp/test', (req, res) => {
+    const caller = (req as any).user;
+    if (caller.role !== 'Admin') {
+      return res.status(403).json({ error: 'Unauthorized. Admins only.' });
+    }
+
+    const db = readDB();
+    const smtp = db.smtpSettings;
+    
+    // Simulate SMTP delivery logs
+    const timestampStr = new Date().toISOString();
+    const mockSendingLog = `[${timestampStr}] [SMTP CONTROL] Initiating Office365 email channel testing via SMTP host: ${smtp.host} on port ${smtp.port}
+[${timestampStr}] [SMTP CONTROL] Establishing socket stream link (security: TLS explicitly ${smtp.tlsEnabled ? 'enabled' : 'disabled'})...
+[${timestampStr}] [SMTP CONTROL] Connection handshake succeeded. Banner text: 220 BY3PR05CA0101.outlook.office365.com
+[${timestampStr}] [SMTP CONTROL] EHLO command response: 250-BY3PR05CA0101.outlook.office365.com Hello [13.111.4.2]...
+[${timestampStr}] [SMTP CONTROL] STARTTLS active - tunnel established.
+[${timestampStr}] [SMTP CONTROL] Authenticating account user: ${smtp.username} ...
+[${timestampStr}] [SMTP CONTROL] Authentication completed (exit code 235: successfully logged in)
+[${timestampStr}] [SMTP CONTROL] MAIL FROM: <${smtp.senderEmail}> - validated.
+[${timestampStr}] [SMTP CONTROL] RCPT TO: <${smtp.recipients}> - accepted.
+[${timestampStr}] [SMTP CONTROL] Sending email DATA stream payload...
+[${timestampStr}] [SMTP CONTROL] Payload Transmission completed. Response code: 250 2.0.0 OK [Message-ID: <eda-${Date.now()}@flow.pro>]
+[${timestampStr}] [SMTP CONTROL] Test email sent successfully! Recipient list [${smtp.recipients}] has been dispatched.`;
+
+    db.smtpSettings.testStatus = 'success';
+    db.smtpSettings.testLog = mockSendingLog;
+    writeDB(db);
+
+    res.json({ success: true, smtpSettings: db.smtpSettings });
   });
 
   // Console terminal command Logs

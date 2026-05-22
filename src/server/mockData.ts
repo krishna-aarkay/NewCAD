@@ -1,4 +1,4 @@
-import { LicenseServer, UserProfile, Checkout, UsageRecord, BorrowRecord, LicenseComplianceIssue, PreemptionTask } from '../types';
+import { LicenseServer, UserProfile, Checkout, UsageRecord, BorrowRecord, LicenseComplianceIssue, PreemptionTask, SmtpSettings } from '../types';
 
 export interface DatabaseSchema {
   users: UserProfile[];
@@ -10,6 +10,7 @@ export interface DatabaseSchema {
   compliance: LicenseComplianceIssue[];
   optionsFiles: Record<string, string>; // serverId -> content
   commandLogs: { id: string; timestamp: string; serverId: string; action: string; output: string }[];
+  smtpSettings: SmtpSettings;
 }
 
 export function generateInitialData(): DatabaseSchema {
@@ -396,6 +397,18 @@ Reread complete.`
       'srv-synopsys': servers[1].optionsFileContent || '',
       'srv-mentor': servers[2].optionsFileContent || '',
     },
-    commandLogs
+    commandLogs,
+    smtpSettings: {
+      host: 'smtp.office365.com',
+      port: 587,
+      username: 'licensing@office365.corp',
+      senderName: 'LicenseFlow Core Notifications',
+      senderEmail: 'licensing@office365.corp',
+      recipients: 'sowjanyanarava541@gmail.com',
+      tlsEnabled: true,
+      alertsEnabled: true,
+      testStatus: 'idle',
+      testLog: 'SMTP system initialized. Configure to test outgoing Office365 emails.'
+    }
   };
 }

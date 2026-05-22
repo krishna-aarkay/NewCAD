@@ -597,12 +597,23 @@ export default function ServersList({ apiHost, currentUser, servers, onRefreshDa
                 <h3 className="font-display font-semibold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-1.5">
                   <Server className="w-4 h-4 text-slate-400" /> License Servers ({servers.length})
                 </h3>
-                {currentUser.role === 'Admin' && (
+                {currentUser.role === 'Admin' ? (
                   <button
                     onClick={() => setShowAddForm(!showAddForm)}
                     className="p-1 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" /> New Server
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      alert("To deploy a new license server or remove existing CAD nodes using SSH, use the ROLE TUNER dropdown in the top header to select 'Admin'.");
+                    }}
+                    className="p-1 px-2.5 bg-slate-100 border border-slate-200 text-slate-400 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-help"
+                    title="Admin role required"
+                  >
+                    <Plus className="w-3.5 h-3.5 opacity-50" /> New Server (Disabled)
                   </button>
                 )}
               </div>

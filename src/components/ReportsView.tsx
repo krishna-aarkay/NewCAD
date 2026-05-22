@@ -28,6 +28,34 @@ export default function ReportsView({ apiHost, currentUser, servers }: ReportsVi
   // Feature usage chart project state
   const [featureUsageProject, setFeatureUsageProject] = useState<string>('all');
 
+  // Sorting columns state hooks
+  const [sortField, setSortField] = useState<'date' | 'username' | 'featureName' | 'durationHours'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleToggleSort = (field: 'date' | 'username' | 'featureName' | 'durationHours') => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const sortedRecords = React.useMemo(() => {
+    return [...records].sort((a, b) => {
+      let valA: any = a[sortField] || '';
+      let valB: any = b[sortField] || '';
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        const compareRes = valA.localeCompare(valB);
+        return sortOrder === 'asc' ? compareRes : -compareRes;
+      } else {
+        const numA = Number(valA) || 0;
+        const numB = Number(valB) || 0;
+        return sortOrder === 'asc' ? (numA - numB) : (numB - numA);
+      }
+    });
+  }, [records, sortField, sortOrder]);
+
   useEffect(() => {
     fetchUsageReports();
   }, [startDate, endDate, filterFeature, filterProject, filterUser]);
@@ -528,22 +556,42 @@ export default function ReportsView({ apiHost, currentUser, servers }: ReportsVi
           <div className="overflow-x-auto max-h-80">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-semibold text-slate-400 uppercase tracking-widest bg-slate-50">
-                  <th className="py-2 px-3">Date</th>
-                  <th className="py-2 px-3">User ID</th>
-                  <th className="py-2 px-3">Feature module</th>
-                  <th className="py-2 px-3">Duration Hours</th>
+                <tr className="border-b border-slate-100 text-[10px] font-semibold text-slate-400 uppercase tracking-widest bg-slate-55 select-none text-slate-600">
+                  <th 
+                    onClick={() => handleToggleSort('date')}
+                    className="py-2 px-3 cursor-pointer hover:bg-slate-100 transition duration-150 rounded"
+                  >
+                    Date {sortField === 'date' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </th>
+                  <th 
+                    onClick={() => handleToggleSort('username')}
+                    className="py-2 px-3 cursor-pointer hover:bg-slate-100 transition duration-150 rounded"
+                  >
+                    User ID {sortField === 'username' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </th>
+                  <th 
+                    onClick={() => handleToggleSort('featureName')}
+                    className="py-2 px-3 cursor-pointer hover:bg-slate-100 transition duration-150 rounded"
+                  >
+                    Feature module {sortField === 'featureName' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </th>
+                  <th 
+                    onClick={() => handleToggleSort('durationHours')}
+                    className="py-2 px-3 cursor-pointer hover:bg-slate-100 transition duration-150 rounded text-right pr-6"
+                  >
+                    Duration Hours {sortField === 'durationHours' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                  </th>
                   <th className="py-2 px-3">Billing Project</th>
                   <th className="py-2 px-3">Tokens Metric</th>
                 </tr>
               </thead>
               <tbody>
-                {records.slice(-50).reverse().map((rec) => (
+                {sortedRecords.slice(0, 100).map((rec) => (
                   <tr key={rec.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
                     <td className="py-2.5 px-3 font-mono text-slate-500">{rec.date}</td>
                     <td className="py-2.5 px-3 font-semibold text-slate-800">{rec.username}</td>
                     <td className="py-2.5 px-3 font-mono text-indigo-600">{rec.featureName}</td>
-                    <td className="py-2.5 px-3">{rec.durationHours} hrs</td>
+                    <td className="py-2.5 px-3 text-right pr-10">{rec.durationHours} hrs</td>
                     <td className="py-2.5 px-3 text-slate-500">{rec.project || 'Apollo'}</td>
                     <td className="py-2.5 px-3 font-semibold text-slate-700">{rec.tokensUsed || rec.durationHours * 10} TK</td>
                   </tr>
