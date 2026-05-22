@@ -11,6 +11,7 @@ export interface DatabaseSchema {
   optionsFiles: Record<string, string>; // serverId -> content
   commandLogs: { id: string; timestamp: string; serverId: string; action: string; output: string }[];
   smtpSettings: SmtpSettings;
+  defaultLoginsDisabled?: boolean;
 }
 
 export function generateInitialData(): DatabaseSchema {
@@ -409,6 +410,7 @@ Reread complete.`
       alertsEnabled: true,
       testStatus: 'idle',
       testLog: 'SMTP system initialized. Configure to test outgoing Office365 emails.'
-    }
+    },
+    defaultLoginsDisabled: false
   };
 }

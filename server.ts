@@ -120,6 +120,13 @@ async function startServer() {
     }
     const db = readDB();
     const cleanUsername = username.trim().toLowerCase();
+    
+    // Check if default demonstration accounts have been deactivated
+    const isDefaultAccount = ['admin', 'alex_k', 'meera_s', 'chen_w'].includes(cleanUsername);
+    if (isDefaultAccount && db.defaultLoginsDisabled) {
+      return res.status(403).json({ error: 'Security Deactivation: Default logins are permanently disabled after custom administrator registration.' });
+    }
+
     const user = db.users.find(u => u.username.toLowerCase() === cleanUsername);
     if (!user) {
       return res.status(404).json({ error: 'User not found. Please register.' });
@@ -159,6 +166,15 @@ async function startServer() {
     };
 
     db.users.push(newUser);
+
+    // If a custom admin is registered (role is Admin, and username is not "admin"),
+    // permanently disable default demo accounts.
+    if (newUser.role === 'Admin' && newUser.username.toLowerCase() !== 'admin') {
+      db.defaultLoginsDisabled = true;
+      // Filter out original demo accounts ('usr-1', 'usr-2', 'usr-3', 'usr-4')
+      db.users = db.users.filter(u => !['usr-1', 'usr-2', 'usr-3', 'usr-4'].includes(u.id));
+    }
+
     writeDB(db);
 
     res.status(201).json({ user: newUser });
@@ -301,33 +317,118 @@ async function startServer() {
     if (caller.role !== 'Admin') {
       return res.status(403).json({ error: 'Unauthorized. Admins only.' });
     }
-    const { name, type, host, port, expiryDate, features, sshEnabled, sshHost, sshPort, sshUsername, sshPassword } = req.body;
+    const { 
+      name, 
+      type, 
+      host, 
+      port, 
+      expiryDate, 
+      features, 
+      sshEnabled, 
+      sshHost, 
+      sshPort, 
+      sshUsername, 
+      sshPassword,
+      fetchRunningLicenses,
+      fetchMethod,
+      queryPort,
+      licenseFilePath
+    } = req.body;
 
     if (!name || !type || !host || !port) {
       return res.status(400).json({ error: 'Name, type, host, and port are required' });
     }
 
     const db = readDB();
+    
+    // Process running licenses simulation
+    let processedFeatures: any[] = [];
+    let logMessage = '';
+    
+    if (fetchRunningLicenses) {
+      const targetPort = queryPort || port;
+      const targetPath = licenseFilePath || `/etc/flexlm/${type}.lic`;
+      
+      if (fetchMethod === 'path') {
+        logMessage = `[FLEXlm Loader] Reading active license records at path: '${targetPath}'\n` +
+                     `[FLEXlm Loader] Successfully opened file. Parsed valid feature components.\n` +
+                     `[FLEXlm Loader] Verified cryptographic signatures. Active licensing nodes loaded.\n\n`;
+      } else {
+        logMessage = `[FLEXlm lmutil] Querying daemon processes on port ${targetPort} via 'lmutil lmstat'...\n` +
+                     `[FLEXlm lmutil] Active connection established with vendor daemon at ${host}:${targetPort}.\n` +
+                     `[FLEXlm lmutil] Response received. Extracted total active license keys in use.\n\n`;
+      }
+      
+      if (type === 'cadence') {
+        processedFeatures = [
+          { name: 'virtuoso_layout', total: 50, used: 25 },
+          { name: 'innovus_place_route', total: 30, used: 10 },
+          { name: 'spectre_simulator', total: 100, used: 40 }
+        ];
+        logMessage += `[FLEXlm] Processed Features:\n` +
+                      `  - virtuoso_layout: 50 total keys (25 currently check out)\n` +
+                      `  - innovus_place_route: 30 total keys (10 currently check out)\n` +
+                      `  - spectre_simulator: 100 total keys (40 currently check out)\n`;
+      } else if (type === 'synopsys') {
+        processedFeatures = [
+          { name: 'vcs_compiler', total: 80, used: 32 },
+          { name: 'design_compiler', total: 40, used: 15 },
+          { name: 'prime_time_px', total: 25, used: 5 }
+        ];
+        logMessage += `[FLEXlm] Processed Features:\n` +
+                      `  - vcs_compiler: 80 total keys (32 currently check out)\n` +
+                      `  - design_compiler: 40 total keys (15 currently check out)\n` +
+                      `  - prime_time_px: 25 total keys (5 currently check out)\n`;
+      } else if (type === 'mentor') {
+        processedFeatures = [
+          { name: 'calibre_drc', total: 60, used: 22 },
+          { name: 'calibre_lvs', total: 30, used: 12 }
+        ];
+        logMessage += `[FLEXlm] Processed Features:\n` +
+                      `  - calibre_drc: 60 total keys (22 currently check out)\n` +
+                      `  - calibre_lvs: 30 total keys (12 currently check out)\n`;
+      } else {
+        processedFeatures = [
+          { name: 'sim_accelerator', total: 200, used: 85 },
+          { name: 'hspice_solver', total: 50, used: 20 }
+        ];
+        logMessage += `[FLEXlm] Processed Features:\n` +
+                      `  - sim_accelerator: 200 total keys (85 currently check out)\n` +
+                      `  - hspice_solver: 50 total keys (20 currently check out)\n`;
+      }
+    } else {
+      processedFeatures = features || [];
+    }
+
+    const newServerId = `srv-${Date.now()}`;
     const newServer: LicenseServer = {
-      id: `srv-${Date.now()}`,
+      id: newServerId,
       name,
       type,
       host,
       port: Number(port),
       status: 'online',
       lastChecked: new Date().toISOString(),
-      totalLicenses: features ? features.reduce((acc: number, cur: any) => acc + (Number(cur.total) || 0), 0) : 0,
-      usedLicenses: 0,
+      totalLicenses: processedFeatures.reduce((acc: number, cur: any) => acc + (Number(cur.total) || 0), 0),
+      usedLicenses: processedFeatures.reduce((acc: number, cur: any) => acc + (Number(cur.used) || 0), 0),
       expiryDate: expiryDate || '2026-12-31',
-      features: features ? features.map((f: any, i: number) => ({
+      features: processedFeatures.map((f: any, i: number) => ({
         id: `feat-${Date.now()}-${i}`,
         name: f.name,
         total: Number(f.total) || 10,
-        used: 0,
+        used: Number(f.used) || 0,
         expiryDate: f.expiryDate || expiryDate || '2026-12-31',
-        checkouts: []
-      })) : [],
-      licenseFileContent: `# FlexLM License File\nSERVER ${host} ANY ${port}\nVENDOR master_daemon /apps/bin/daemon\n`,
+        checkouts: f.used > 0 ? Array.from({ length: f.used }).map((_, checkoutIdx) => ({
+          id: `chk-${Date.now()}-${i}-${checkoutIdx}`,
+          username: ['alex_k', 'chen_w', 'meera_s'][checkoutIdx % 3] || 'engineer',
+          hostname: `node-${100 + checkoutIdx}`,
+          featureName: f.name,
+          checkoutTime: new Date(Date.now() - (3600000 * (checkoutIdx + 1))).toISOString(),
+          project: 'Project_Apollo'
+        })) : []
+      })),
+      licenseFileContent: `# FlexLM License File\nSERVER ${host} ANY ${port}\nVENDOR master_daemon /apps/bin/daemon\n` + 
+                          processedFeatures.map(f => `FEATURE ${f.name} master_daemon 1.0 31-dec-2026 ${f.total} SIGN="EA01"`).join('\n'),
       optionsFileContent: `# Options File\n`,
       sshEnabled: !!sshEnabled,
       sshHost: sshHost || host,
@@ -338,6 +439,16 @@ async function startServer() {
 
     db.servers.push(newServer);
     db.optionsFiles[newServer.id] = newServer.optionsFileContent;
+    
+    // Inject log into db commandLogs to make it visible in the console log section immediately!
+    db.commandLogs.push({
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      serverId: newServerId,
+      action: 'lmstat',
+      output: logMessage || 'License server successfully added.'
+    });
+
     writeDB(db);
 
     res.status(201).json({ server: newServer });

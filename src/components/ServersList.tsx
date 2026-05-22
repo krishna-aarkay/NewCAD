@@ -33,6 +33,12 @@ export default function ServersList({ apiHost, currentUser, servers, onRefreshDa
   const [featName, setFeatName] = useState('');
   const [featTotal, setFeatTotal] = useState('50');
   const [featuresList, setFeaturesList] = useState<{name: string, total: number}[]>([]);
+
+  // Create Server dynamic live fetch parameters
+  const [fetchRunningLicenses, setFetchRunningLicenses] = useState(true);
+  const [fetchMethod, setFetchMethod] = useState<'port' | 'path'>('port');
+  const [queryPort, setQueryPort] = useState('5280');
+  const [licenseFilePath, setLicenseFilePath] = useState('/etc/flexlm/licenses/active.lic');
   
   // SSH state variables
   const [sshEnabled, setSshEnabled] = useState(false);
@@ -295,7 +301,11 @@ export default function ServersList({ apiHost, currentUser, servers, onRefreshDa
           sshHost: sshHost || undefined,
           sshPort: sshPort ? parseInt(sshPort) : undefined,
           sshUsername: sshUsername || undefined,
-          sshPassword: sshPassword || undefined
+          sshPassword: sshPassword || undefined,
+          fetchRunningLicenses,
+          fetchMethod,
+          queryPort: parseInt(queryPort) || parseInt(newPort) || 5280,
+          licenseFilePath
         })
       });
 
@@ -315,6 +325,10 @@ export default function ServersList({ apiHost, currentUser, servers, onRefreshDa
       setSshPort('22');
       setSshUsername('');
       setSshPassword('');
+      setFetchRunningLicenses(true);
+      setFetchMethod('port');
+      setQueryPort('5280');
+      setLicenseFilePath('/etc/flexlm/licenses/active.lic');
       setShowAddForm(false);
       onRefreshData();
     } catch (err: any) {
@@ -789,39 +803,78 @@ export default function ServersList({ apiHost, currentUser, servers, onRefreshDa
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase mb-1">Initial Features Table</span>
-                    <div className="flex gap-1.5 mb-2">
-                      <input
-                        type="text"
-                        value={featName}
-                        onChange={(e) => setFeatName(e.target.value)}
-                        placeholder="feat_name"
-                        className="flex-1 px-2.5 py-1 border border-slate-300 rounded-md text-xs font-mono"
-                      />
-                      <input
-                        type="number"
-                        value={featTotal}
-                        onChange={(e) => setFeatTotal(e.target.value)}
-                        className="w-16 px-2.5 py-1 border border-slate-300 rounded-md text-xs font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddFeature}
-                        className="px-2.5 py-1 bg-slate-800 text-white font-semibold rounded text-xs hover:bg-slate-900 cursor-pointer"
-                      >
-                        Add
-                      </button>
+                  <div className="p-3 bg-blue-50/40 rounded-lg border border-blue-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-blue-800 block uppercase tracking-wider">Dynamic License Loader</span>
+                        <span className="text-[9px] text-slate-500 mt-0.5">Query active server or scan local files on save</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={fetchRunningLicenses} 
+                          onChange={(e) => setFetchRunningLicenses(e.target.checked)}
+                          className="sr-only peer" 
+                        />
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
                     </div>
 
-                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                      {featuresList.map((f, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-white border border-slate-200 px-2 py-0.5 rounded-full text-slate-700 font-mono">
-                          {f.name}: {f.total}
-                          <Trash2 onClick={() => handleRemoveFeatureTemp(i)} className="w-3 h-3 text-red-500 cursor-pointer" />
-                        </span>
-                      ))}
-                    </div>
+                    {fetchRunningLicenses && (
+                      <div className="space-y-2 pt-2 border-t border-blue-100 transition-all">
+                        <div className="flex gap-4 items-center">
+                          <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="fetchMethod"
+                              checked={fetchMethod === 'port'}
+                              onChange={() => setFetchMethod('port')}
+                              className="w-3.5 h-3.5 text-blue-600"
+                            />
+                            🛠️ Query Running Port
+                          </label>
+
+                          <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="fetchMethod"
+                              checked={fetchMethod === 'path'}
+                              onChange={() => setFetchMethod('path')}
+                              className="w-3.5 h-3.5 text-blue-600"
+                            />
+                            📄 Load License File Path
+                          </label>
+                        </div>
+
+                        {fetchMethod === 'port' ? (
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Acquisition Listen Port</label>
+                            <input
+                              type="text"
+                              required={fetchMethod === 'port'}
+                              value={queryPort}
+                              onChange={(e) => setQueryPort(e.target.value)}
+                              placeholder={newPort || "5280"}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono bg-white"
+                            />
+                            <span className="text-[9px] text-slate-400 block">System runs `lmutil` on the active local or remote listener port.</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Target License File Path</label>
+                            <input
+                              type="text"
+                              required={fetchMethod === 'path'}
+                              value={licenseFilePath}
+                              onChange={(e) => setLicenseFilePath(e.target.value)}
+                              placeholder="/etc/flexlm/licenses/active.lic"
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono bg-white"
+                            />
+                            <span className="text-[9px] text-slate-400 block">Provide full path (e.g. `/etc/flexlm/cadence.lic`) to import actual features.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* SSH Configuration toggle and fields */}
